@@ -36,7 +36,16 @@
   const siteAdapter = SITE_ADAPTERS[location.hostname] || SITE_ADAPTERS["chatgpt.com"];
   let bypassNextSend = false;
   let scanInProgress = false;
-  let manualRedactionHost = null;
+  let extensionPaused = false;
+
+  chrome.storage.local.get("extensionPaused").then((stored) => {
+    extensionPaused = Boolean(stored.extensionPaused);
+  }).catch(() => {});
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.extensionPaused) {
+      extensionPaused = Boolean(changes.extensionPaused.newValue);
+    }
+  });
 
   function findComposer() {
     for (const selector of siteAdapter.composerSelectors) {
@@ -189,97 +198,6 @@
     await chrome.storage.local.set({ piiPrivate: withoutDuplicate.slice(0, MAX_LOCAL_FEEDBACK) });
   }
 
-  function selectedComposerText(composer) {
-    if (composer instanceof HTMLTextAreaElement) {
-      const start = composer.selectionStart;
-      const end = composer.selectionEnd;
-      if (end <= start) return null;
-      return { value: composer.value.slice(start, end), start, end, range: null };
-    }
-    const selection = window.getSelection();
-    if (!selection?.rangeCount || selection.isCollapsed) return null;
-    const range = selection.getRangeAt(0);
-    if (!composer.contains(range.commonAncestorContainer)) return null;
-    return { value: range.toString(), range: range.cloneRange() };
-  }
-
-  function replaceManualSelection(composer, selected, replacement) {
-    composer.focus();
-    if (composer instanceof HTMLTextAreaElement) {
-      const next = composer.value.slice(0, selected.start) + replacement + composer.value.slice(selected.end);
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(composer, next);
-      composer.setSelectionRange(selected.start + replacement.length, selected.start + replacement.length);
-      composer.dispatchEvent(new Event("input", { bubbles: true }));
-      return;
-    }
-    const range = selected.range;
-    if (!range || !composer.contains(range.commonAncestorContainer)) return;
-    range.deleteContents();
-    const node = document.createTextNode(replacement);
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    composer.dispatchEvent(new InputEvent("input", {
-      bubbles: true,
-      inputType: "insertReplacementText",
-      data: replacement,
-    }));
-  }
-
-  function closeManualRedaction() {
-    manualRedactionHost?.remove();
-    manualRedactionHost = null;
-  }
-
-  function showManualRedaction(composer) {
-    const selected = selectedComposerText(composer);
-    const value = selected?.value.trim();
-    if (!value || value.length > 200) {
-      closeManualRedaction();
-      return;
-    }
-    closeManualRedaction();
-    const host = document.createElement("div");
-    manualRedactionHost = host;
-    host.style.cssText = "all:initial;position:fixed;z-index:2147483646;right:16px;bottom:88px";
-    const shadow = host.attachShadow({ mode: "closed" });
-    shadow.innerHTML = `
-      <style>
-        .panel { width: 270px; box-sizing: border-box; padding: 12px; border: 1px solid #bfd4c9; border-radius: 12px; background: #fff; color: #1d2c25; box-shadow: 0 12px 38px rgba(0,0,0,.25); font: 12px/1.4 Inter,system-ui,sans-serif; }
-        strong { display:block; overflow:hidden; margin-bottom:8px; text-overflow:ellipsis; white-space:nowrap; }
-        select, button { box-sizing:border-box; width:100%; padding:8px; border-radius:8px; font:inherit; }
-        select { margin-bottom:7px; border:1px solid #cad4cf; background:#fff; color:#25332c; }
-        button { border:0; background:#16794b; color:#fff; font-weight:700; cursor:pointer; }
-        .cancel { margin-top:5px; background:transparent; color:#526159; font-weight:500; }
-      </style>
-      <div class="panel" role="dialog" aria-label="Classify selected private information">
-        <strong title="${value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")}">Classify “${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}”</strong>
-        <select aria-label="Private information category">
-          <option value="PERSON">Person</option><option value="ORGANIZATION">Organization</option>
-          <option value="LOCATION">Location</option><option value="DATE_OF_BIRTH">Date of birth</option>
-          <option value="EMAIL">Email</option><option value="PHONE">Phone</option>
-          <option value="PRIVATE_ENTITY">Other private information</option>
-        </select>
-        <button class="apply" type="button">Learn locally & redact</button>
-        <button class="cancel" type="button">Cancel</button>
-      </div>`;
-    shadow.querySelector(".cancel").addEventListener("click", closeManualRedaction);
-    shadow.querySelector(".apply").addEventListener("click", async () => {
-      const type = shadow.querySelector("select").value;
-      const button = shadow.querySelector(".apply");
-      button.disabled = true;
-      button.textContent = "Saving locally…";
-      await rememberPrivate(value, type);
-      replaceManualSelection(composer, selected, instructions.placeholders[type] || instructions.placeholders.PRIVATE_ENTITY);
-      closeManualRedaction();
-    });
-    document.documentElement.append(host);
-  }
-
   function findingRanges(message, findings, includedIndexes = null) {
     const ranges = [];
     const lowerMessage = message.toLocaleLowerCase();
@@ -401,8 +319,9 @@
           .type { color: #65746c; font-size: 10px; }
           button { padding: 10px 14px; border-radius: 9px; border: 1px solid #cad4cf; font: 600 13px/1 system-ui, sans-serif; cursor: pointer; }
           .not-pii { padding: 7px 9px; background: #fff; color: #526159; font-size: 11px; }
-          .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
-          .cancel, .original { background: #fff; color: #25332c; }
+          .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; column-gap: 12px; row-gap: 10px; margin-top: 16px; }
+          .cancel, .original, .pause-protection { background: #fff; color: #25332c; }
+          .pause-protection { margin-right: auto; }
           .redacted { border-color: #16794b; background: #16794b; color: #fff; }
           button:disabled { opacity: .5; cursor: not-allowed; }
           button:focus-visible, input:focus-visible { outline: 3px solid #78aaf8; outline-offset: 2px; }
@@ -446,6 +365,7 @@
               </div>
             </details>
             <div class="actions">
+              <button class="pause-protection" type="button">Pause protection</button>
               <button class="cancel" type="button">Cancel</button>
               <button class="original" type="button">Send original</button>
               <button class="redacted" type="button">Send redacted</button>
@@ -459,6 +379,7 @@
       const redactedButton = shadow.querySelector(".redacted");
       const cancelButton = shadow.querySelector(".cancel");
       const originalButton = shadow.querySelector(".original");
+      const pauseButton = shadow.querySelector(".pause-protection");
       const backdrop = shadow.querySelector(".backdrop");
       const classification = shadow.querySelector(".classification");
       const addPrivateButton = shadow.querySelector(".add-private");
@@ -468,6 +389,7 @@
       let pendingSelection = null;
       let pointerSelectionStart = null;
       selectionInput.value = message;
+      pauseButton.textContent = extensionPaused ? "Resume protection" : "Pause protection";
 
       if (!messageBox || !redactedPreview || !findingsBox || !redactedButton || !cancelButton || !originalButton || !backdrop) {
         host.remove();
@@ -636,6 +558,13 @@
         }
       };
       cancelButton.addEventListener("click", () => finish({ action: "cancel" }));
+      pauseButton.addEventListener("click", async () => {
+        pauseButton.disabled = true;
+        extensionPaused = !extensionPaused;
+        await chrome.storage.local.set({ extensionPaused });
+        pauseButton.textContent = extensionPaused ? "Resume protection" : "Pause protection";
+        pauseButton.disabled = false;
+      });
       originalButton.addEventListener("click", () => finish({ action: "original", message }));
       redactedButton.addEventListener("click", () => finish({
         action: "redacted",
@@ -729,10 +658,20 @@
       if (event.target.classList.contains("backdrop")) close();
     });
     shadow.querySelector(".log-link").addEventListener("click", () => {
-      void chrome.runtime.sendMessage({ type: "open-logs" });
+      sendRuntimeMessageSafely({ type: "open-logs" });
     });
     document.documentElement.append(host);
     shadow.querySelector(".close").focus();
+  }
+
+  function sendRuntimeMessageSafely(message) {
+    try {
+      const pending = chrome.runtime.sendMessage(message);
+      if (pending?.catch) pending.catch(() => {});
+    } catch {
+      // An open chat tab can temporarily retain this script after the extension
+      // is reloaded. Diagnostics must not create a second uncaught exception.
+    }
   }
 
   async function approveAndSend(message, sendButton, originalComposer) {
@@ -768,11 +707,11 @@
       } else if (staleExtension) {
         window.alert("Privacy Guard was reloaded or updated. The message was not sent.\n\nRefresh this chat page once, then try again.");
       } else {
-        void chrome.runtime.sendMessage({
+        sendRuntimeMessageSafely({
           target: "background",
           type: "log-event",
           entry: { level: "error", event: "content-scan-request-failed", detail: errorMessage },
-        }).catch(() => {});
+        });
         showScanFailureModal(errorMessage);
       }
       console.info(`Privy Local Privacy Guard: ${errorMessage}`);
@@ -788,6 +727,7 @@
       bypassNextSend = false;
       return;
     }
+    if (extensionPaused) return;
     const composer = findComposer();
     const message = readMessage(composer);
     if (!message) return;
@@ -796,18 +736,8 @@
     void approveAndSend(message, sendButton, composer);
   }, true);
 
-  document.addEventListener("mouseup", (event) => {
-    const composer = findComposer();
-    if (composer?.contains(event.target)) showManualRedaction(composer);
-  }, true);
-
-  document.addEventListener("keyup", (event) => {
-    if (!event.shiftKey) return;
-    const composer = findComposer();
-    if (composer?.contains(event.target)) showManualRedaction(composer);
-  }, true);
-
   document.addEventListener("keydown", (event) => {
+    if (extensionPaused) return;
     const composer = findComposer();
     if (!composer || !composer.contains(event.target)) return;
     const isSendShortcut =

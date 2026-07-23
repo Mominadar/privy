@@ -61,8 +61,10 @@ Users can also highlight missed words in the confirmation modal, classify them
 as a person, organization, location, email, phone number, or other private
 information, and redact them immediately. These classifications are stored only
 in `chrome.storage.local` and are applied to matching text in later messages.
-Users may also highlight text directly in a supported chat composer; a local
-classification panel appears and can replace it before the message is sent.
+Protection can be paused or resumed from the popup or directly from the privacy
+confirmation modal. While paused, outgoing messages pass through without a local
+scan. Selecting text in a chat composer does not open a separate popup; missed
+PII classification remains available inside the confirmation modal.
 Contextual dates following labels such as `DOB`, `date of birth`, `born on`, or
 `birthday` are detected and replaced with `[DATE_OF_BIRTH]`.
 Deterministic contextual rules also cover self-introductions such as `I'm

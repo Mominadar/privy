@@ -12,8 +12,10 @@ const integrityText = document.querySelector("#integrity");
 const customModelId = document.querySelector("#custom-model-id");
 const addCustomModelButton = document.querySelector("#add-custom-model");
 const customModelError = document.querySelector("#custom-model-error");
+const toggleProtectionButton = document.querySelector("#toggle-protection");
 let customModel = null;
 let currentStatus = "not-downloaded";
+let extensionPaused = false;
 
 if (new URLSearchParams(location.search).has("welcome")) {
   document.body.classList.add("welcome");
@@ -74,6 +76,12 @@ function renderStatus(status, progress = 0, error = "") {
       : status === "deleting"
         ? `Deleting… ${progress}%`
         : "Delete all local model data";
+}
+
+function renderProtectionState(paused) {
+  extensionPaused = Boolean(paused);
+  toggleProtectionButton.textContent = extensionPaused ? "Resume protection" : "Pause protection";
+  toggleProtectionButton.setAttribute("aria-pressed", String(extensionPaused));
 }
 
 async function ensureLocalModelCapacity(model) {
@@ -190,12 +198,13 @@ async function deleteModel() {
 }
 
 async function initialize() {
-  const stored = await chrome.storage.local.get(["selectedModel", "customModel", "modelStatus", "modelProgress", "modelError"]);
+  const stored = await chrome.storage.local.get(["selectedModel", "customModel", "modelStatus", "modelProgress", "modelError", "extensionPaused"]);
   if (stored.customModel) addCustomModelOption(stored.customModel);
   modelSelect.value = APPROVED_MODELS[stored.selectedModel] || stored.customModel?.id === stored.selectedModel
     ? stored.selectedModel
     : DEFAULT_MODEL;
   renderModelDetails();
+  renderProtectionState(stored.extensionPaused);
   renderStatus(stored.modelStatus, stored.modelProgress, stored.modelError);
   if (!["deleting", "downloading", "retrying", "cancelling"].includes(stored.modelStatus)) {
     await refreshActualStatus();
@@ -208,6 +217,9 @@ chrome.storage.onChanged.addListener((changes) => {
       renderStatus(state.modelStatus, state.modelProgress, state.modelError)
     );
   }
+  if (changes.extensionPaused) {
+    renderProtectionState(changes.extensionPaused.newValue);
+  }
 });
 
 modelSelect.addEventListener("change", async () => {
@@ -219,6 +231,14 @@ prepareButton.addEventListener("click", prepareModel);
 removeButton.addEventListener("click", () => {
   if (currentStatus === "downloading" || currentStatus === "retrying") void cancelDownload();
   else void deleteModel();
+});
+toggleProtectionButton.addEventListener("click", async () => {
+  toggleProtectionButton.disabled = true;
+  try {
+    await chrome.storage.local.set({ extensionPaused: !extensionPaused });
+  } finally {
+    toggleProtectionButton.disabled = false;
+  }
 });
 addCustomModelButton.addEventListener("click", async () => {
   customModelError.textContent = "";

@@ -31,6 +31,7 @@ input { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #34
 button { padding: 10px 12px; background: #24a36a; color: white; border: 0; cursor: pointer; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 button.secondary { margin-top: 8px; background: transparent; border: 1px solid #34443d; }
+#prepare { margin-top: 8px; }
 .custom-model { margin: 9px 0 0; font-size: 11px; }
 .custom-model summary { color: #75d7aa; cursor: pointer; }
 .custom-model-form { display: grid; gap: 7px; margin-top: 9px; padding: 10px; border: 1px solid #293730; border-radius: 9px; }
