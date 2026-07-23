@@ -1,0 +1,32 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #0d1210; color: #edf5f1; }
+main { width: min(900px, calc(100% - 32px)); margin: 48px auto; }
+header { margin-bottom: 28px; }
+.eyebrow { color: #60d49c; font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+.page-brand { display: flex; align-items: center; gap: 11px; }
+.page-brand img { border-radius: 10px; }
+h1 { margin: 6px 0 10px; font-size: clamp(28px, 5vw, 42px); }
+header > p:last-child { max-width: 680px; color: #aabbb2; line-height: 1.6; }
+.card { margin: 16px 0; padding: 22px; border: 1px solid #2d3b35; border-radius: 14px; background: #151c19; }
+.feedback-card { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 24px; padding: 16px 18px; border: 1px solid #2d3b35; border-radius: 12px; background: #151c19; }
+.feedback-card h2 { font-size: 15px; }
+.feedback-card p { margin: 5px 0 0; color: #93a79d; font-size: 12px; }
+.feedback-card button { flex: none; padding: 9px 11px; border: 1px solid #415149; border-radius: 8px; background: transparent; color: #edf5f1; cursor: pointer; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+h2 { margin: 0 0 5px; font-size: 19px; }
+.repo { color: #93a79d; font-size: 12px; overflow-wrap: anywhere; }
+.badge { flex: none; padding: 5px 9px; border-radius: 999px; background: #29332f; color: #c8d2cd; font-size: 11px; }
+.badge.ready { background: #123e2a; color: #78e6ad; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 18px 0; }
+.fact { padding: 10px; border-radius: 8px; background: #101613; }
+.fact span { display: block; color: #82968c; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.fact code { display: block; margin-top: 5px; color: #d9e4df; font-size: 11px; overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { padding: 9px 7px; border-top: 1px solid #2a3631; text-align: left; vertical-align: top; }
+th { color: #91a49a; font-size: 10px; text-transform: uppercase; }
+td code { overflow-wrap: anywhere; word-break: break-all; }
+.yes { color: #67dc9e; }
+.no { color: #d7a65d; }
+a { color: #75d7aa; }
+@media (max-width: 600px) { .card { padding: 16px; } .hash { display: none; } .feedback-card { align-items: stretch; flex-direction: column; } }

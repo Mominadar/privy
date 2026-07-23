@@ -1,0 +1,7 @@
+*.pem
+*.key
+*.crx
+node_modules/
+models/
+dist-extension/
+dist-extension.zip

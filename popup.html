@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Privacy Guard</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img src="icons/icon48.png" width="40" height="40" alt="" />
+        <h1 id="title">Privacy Guard</h1>
+      </div>
+      <p id="intro" class="intro" hidden>
+        Choose and download a verified model before privacy scanning can begin.
+      </p>
+      <p class="eyebrow">ACTIVE LOCAL MODEL</p>
+      <select id="model" aria-label="Privacy model">
+        <option value="Xenova/bert-base-NER">BERT English NER</option>
+        <option value="Xenova/distilbert-base-multilingual-cased-ner-hrl">
+          DistilBERT Multilingual NER
+        </option>
+      </select>
+      <details class="custom-model">
+        <summary>Use another Hugging Face model</summary>
+        <div class="custom-model-form">
+          <label for="custom-model-id">Repository ID</label>
+          <input id="custom-model-id" type="text" placeholder="owner/model" autocomplete="off" spellcheck="false" />
+          <button id="add-custom-model" type="button">Validate and select model</button>
+          <p id="custom-model-error" class="form-error" role="alert"></p>
+        </div>
+      </details>
+      <div class="status-row">
+        <span id="dot" class="dot"></span>
+        <span id="status">Checking model…</span>
+      </div>
+      <progress id="progress" max="100" value="0"></progress>
+      <dl class="details">
+        <div><dt>Source</dt><dd>Hugging Face</dd></div>
+        <div><dt>Download</dt><dd id="size">≈105 MB</dd></div>
+        <div><dt>Revision</dt><dd id="revision">24c7e5a…</dd></div>
+        <div><dt>Integrity</dt><dd id="integrity">SHA-256 verified</dd></div>
+      </dl>
+      <button id="prepare" type="button">Download selected model</button>
+      <button id="remove" class="secondary" type="button">Delete all local model data</button>
+      <a class="model-link" href="models.html" target="_blank">View downloaded models on this device</a>
+      <p class="note">Model files, message checks, and false-positive feedback stay on this device.</p>
+      <nav class="supported-platforms" aria-label="Supported AI websites">
+        <span>Works with</span>
+        <div class="platform-links">
+          <a href="https://chatgpt.com/" target="_blank" rel="noreferrer" title="Open ChatGPT" aria-label="Open ChatGPT">
+            <img src="platform-icons/chatgpt.svg" alt="" />
+          </a>
+          <a href="https://claude.ai/" target="_blank" rel="noreferrer" title="Open Claude" aria-label="Open Claude">
+            <img src="platform-icons/claude.svg" alt="" />
+          </a>
+          <a href="https://gemini.google.com/" target="_blank" rel="noreferrer" title="Open Gemini" aria-label="Open Gemini">
+            <img src="platform-icons/gemini.svg" alt="" />
+          </a>
+        </div>
+      </nav>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

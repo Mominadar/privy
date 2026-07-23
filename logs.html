@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Guard Local Logs</title>
+    <link rel="stylesheet" href="logs.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Local diagnostic logs</h1>
+      <p>Logs stay on this device and do not contain message text or detected values.</p>
+      <div class="actions">
+        <button id="download" type="button">Download logs as text</button>
+        <button id="clear" class="secondary" type="button">Clear logs</button>
+      </div>
+      <pre id="logs" aria-live="polite">Reading local logs…</pre>
+    </main>
+    <script type="module" src="logs.js"></script>
+  </body>
+</html>

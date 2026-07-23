@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Downloaded Privacy Models</title>
+    <link rel="stylesheet" href="models.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="page-brand">
+          <img src="icons/icon48.png" width="42" height="42" alt="" />
+          <p class="eyebrow">LOCAL PRIVACY GUARD</p>
+        </div>
+        <h1>Models on this device</h1>
+        <p>These files are stored in this extension’s private browser cache. Each file is accepted only after SHA-256 verification.</p>
+      </header>
+      <section class="feedback-card">
+        <div>
+          <h2>Local adaptive memory</h2>
+          <p><span id="feedback-count">0</span> learned rule(s). “Not PII” values use salted hashes; user-classified private values and categories stay in local extension storage.</p>
+        </div>
+        <button id="clear-feedback" type="button">Clear local learning</button>
+      </section>
+      <section id="models" aria-live="polite"><p>Reading local model cache…</p></section>
+    </main>
+    <script type="module" src="models.js"></script>
+  </body>
+</html>

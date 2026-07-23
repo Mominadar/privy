@@ -1,0 +1,17 @@
+{
+  "name": "chatgpt-local-privacy-guard",
+  "version": "4.3.9",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check content.js && node --check background.js && node --check popup.js && node --check models.js && node --check logs.js && node --check offscreen.js && node --check model-policy.js && node --check model-prompts.js && node --check entity-normalization.js",
+    "vendor": "node vendor-runtime.mjs",
+    "build": "npm run vendor && node build-extension.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
