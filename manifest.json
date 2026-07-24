@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Privy Local Privacy Guard",
-  "version": "4.3.9",
+  "version": "4.4.0",
   "description": "Checks ChatGPT, Claude, and Gemini messages locally before sending.",
   "icons": {
     "16": "icons/icon16.png",

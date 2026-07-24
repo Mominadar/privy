@@ -12,6 +12,7 @@ body {
 
 main { padding: 20px; }
 h1 { margin: 0; font-size: 21px; }
+h2 { margin: 0; font-size: 14px; }
 .brand { display: flex; align-items: center; gap: 11px; margin-bottom: 20px; }
 .brand img { border-radius: 10px; }
 .intro { color: #c3d0ca; font-size: 13px; line-height: 1.5; }
@@ -32,6 +33,11 @@ button { padding: 10px 12px; background: #24a36a; color: white; border: 0; curso
 button:disabled { opacity: .55; cursor: not-allowed; }
 button.secondary { margin-top: 8px; background: transparent; border: 1px solid #34443d; }
 #prepare { margin-top: 8px; }
+.privacy-consent { margin: 0 0 18px; padding: 13px; border: 1px solid #456052; border-radius: 10px; background: #18231e; }
+.privacy-consent[hidden] { display: none; }
+.privacy-consent p { margin: 7px 0; color: #c3d0ca; font-size: 11px; line-height: 1.5; }
+.privacy-consent a { color: #75d7aa; font-size: 11px; }
+.privacy-consent button { margin-top: 10px; }
 .custom-model { margin: 9px 0 0; font-size: 11px; }
 .custom-model summary { color: #75d7aa; cursor: pointer; }
 .custom-model-form { display: grid; gap: 7px; margin-top: 9px; padding: 10px; border: 1px solid #293730; border-radius: 9px; }

@@ -7,7 +7,8 @@ server, or a companion application after the extension has been packaged.
 ## Production behavior
 
 1. Installation opens a setup page.
-2. The user selects one of two approved models and explicitly clicks download.
+2. The user accepts an in-product privacy disclosure, selects a model, and
+   explicitly clicks download.
 3. The extension downloads only pinned model data from Hugging Face.
 4. Every file is SHA-256 verified before entering the trusted browser cache.
 5. A bundled Transformers.js + ONNX/WASM runtime performs inference locally.
@@ -81,9 +82,10 @@ Marking a finding as **Not PII** adds a salted hash to `chrome.storage.local`.
 The original value is not stored, and matching future false positives are
 suppressed locally. This is adaptive exception memory, not model-weight
 retraining. Users can clear it from the device-model page. Deleting local model
-data performs a clean reset: it disposes every loaded pipeline, deletes the
+data performs a clean reset: it closes the local inference context, deletes the
 entire verified-model cache (including files from older revisions), and removes
-all adaptive exception memory and custom-model configuration. A later download therefore fetches and verifies
+all adaptive memory, diagnostic logs, consent state, pause state, and
+custom-model configuration. A later download therefore fetches and verifies
 fresh model files and starts with no learned feedback.
 
 Positive user classifications retain the selected text and category locally so

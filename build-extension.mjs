@@ -14,6 +14,8 @@ const files = [
   "logs.html",
   "logs.css",
   "logs.js",
+  "privacy.html",
+  "privacy.css",
   "offscreen.html",
   "offscreen.js",
   "popup.html",

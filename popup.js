@@ -13,9 +13,12 @@ const customModelId = document.querySelector("#custom-model-id");
 const addCustomModelButton = document.querySelector("#add-custom-model");
 const customModelError = document.querySelector("#custom-model-error");
 const toggleProtectionButton = document.querySelector("#toggle-protection");
+const privacyConsent = document.querySelector("#privacy-consent");
+const acceptPrivacyButton = document.querySelector("#accept-privacy");
 let customModel = null;
 let currentStatus = "not-downloaded";
 let extensionPaused = false;
+let privacyConsentAccepted = false;
 
 if (new URLSearchParams(location.search).has("welcome")) {
   document.body.classList.add("welcome");
@@ -68,7 +71,7 @@ function renderStatus(status, progress = 0, error = "") {
   progressBar.value = progress;
   modelSelect.disabled = busy;
   prepareButton.disabled = busy;
-  removeButton.disabled = status === "cancelling" || status === "deleting" || status === "not-downloaded";
+  removeButton.disabled = status === "cancelling" || status === "deleting";
   removeButton.textContent = downloading
     ? "Cancel download"
     : status === "cancelling"
@@ -80,8 +83,19 @@ function renderStatus(status, progress = 0, error = "") {
 
 function renderProtectionState(paused) {
   extensionPaused = Boolean(paused);
+  const protectionEnabled = privacyConsentAccepted && !extensionPaused;
   toggleProtectionButton.textContent = extensionPaused ? "Resume protection" : "Pause protection";
   toggleProtectionButton.setAttribute("aria-pressed", String(extensionPaused));
+  toggleProtectionButton.disabled = !privacyConsentAccepted;
+  toggleProtectionButton.title = privacyConsentAccepted
+    ? (protectionEnabled ? "Pause outgoing-message checks" : "Resume outgoing-message checks")
+    : "Accept the privacy disclosure before enabling protection";
+}
+
+function renderPrivacyConsent(accepted) {
+  privacyConsentAccepted = Boolean(accepted);
+  privacyConsent.hidden = privacyConsentAccepted;
+  renderProtectionState(extensionPaused);
 }
 
 async function ensureLocalModelCapacity(model) {
@@ -198,13 +212,22 @@ async function deleteModel() {
 }
 
 async function initialize() {
-  const stored = await chrome.storage.local.get(["selectedModel", "customModel", "modelStatus", "modelProgress", "modelError", "extensionPaused"]);
+  const stored = await chrome.storage.local.get([
+    "selectedModel",
+    "customModel",
+    "modelStatus",
+    "modelProgress",
+    "modelError",
+    "extensionPaused",
+    "privacyConsentAccepted",
+  ]);
   if (stored.customModel) addCustomModelOption(stored.customModel);
   modelSelect.value = APPROVED_MODELS[stored.selectedModel] || stored.customModel?.id === stored.selectedModel
     ? stored.selectedModel
     : DEFAULT_MODEL;
   renderModelDetails();
-  renderProtectionState(stored.extensionPaused);
+  extensionPaused = Boolean(stored.extensionPaused);
+  renderPrivacyConsent(stored.privacyConsentAccepted);
   renderStatus(stored.modelStatus, stored.modelProgress, stored.modelError);
   if (!["deleting", "downloading", "retrying", "cancelling"].includes(stored.modelStatus)) {
     await refreshActualStatus();
@@ -219,6 +242,9 @@ chrome.storage.onChanged.addListener((changes) => {
   }
   if (changes.extensionPaused) {
     renderProtectionState(changes.extensionPaused.newValue);
+  }
+  if (changes.privacyConsentAccepted) {
+    renderPrivacyConsent(changes.privacyConsentAccepted.newValue);
   }
 });
 
@@ -238,6 +264,19 @@ toggleProtectionButton.addEventListener("click", async () => {
     await chrome.storage.local.set({ extensionPaused: !extensionPaused });
   } finally {
     toggleProtectionButton.disabled = false;
+  }
+});
+acceptPrivacyButton.addEventListener("click", async () => {
+  acceptPrivacyButton.disabled = true;
+  acceptPrivacyButton.textContent = "Enabling…";
+  try {
+    await chrome.storage.local.set({
+      privacyConsentAccepted: true,
+      extensionPaused: false,
+    });
+  } finally {
+    acceptPrivacyButton.disabled = false;
+    acceptPrivacyButton.textContent = "I agree — enable protection";
   }
 });
 addCustomModelButton.addEventListener("click", async () => {

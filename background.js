@@ -188,7 +188,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           modelProgress: 85,
           modelError: "Clearing local learning…",
         });
-        await chrome.storage.local.remove(["piiNotPrivate", "piiPrivate", "piiFeedbackSalt", "customModel", "modelError"]);
+        await chrome.storage.local.remove([
+          "piiNotPrivate",
+          "piiPrivate",
+          "piiFeedbackSalt",
+          "privacyLogs",
+          "customModel",
+          "modelError",
+          "extensionPaused",
+          "privacyConsentAccepted",
+        ]);
         await chrome.storage.local.set({
           selectedModel: DEFAULT_MODEL,
           modelStatus: "not-downloaded",

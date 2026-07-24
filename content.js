@@ -37,13 +37,18 @@
   let bypassNextSend = false;
   let scanInProgress = false;
   let extensionPaused = false;
+  let privacyConsentAccepted = false;
 
-  chrome.storage.local.get("extensionPaused").then((stored) => {
+  chrome.storage.local.get(["extensionPaused", "privacyConsentAccepted"]).then((stored) => {
     extensionPaused = Boolean(stored.extensionPaused);
+    privacyConsentAccepted = Boolean(stored.privacyConsentAccepted);
   }).catch(() => {});
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.extensionPaused) {
       extensionPaused = Boolean(changes.extensionPaused.newValue);
+    }
+    if (changes.privacyConsentAccepted) {
+      privacyConsentAccepted = Boolean(changes.privacyConsentAccepted.newValue);
     }
   });
 
@@ -727,7 +732,7 @@
       bypassNextSend = false;
       return;
     }
-    if (extensionPaused) return;
+    if (!privacyConsentAccepted || extensionPaused) return;
     const composer = findComposer();
     const message = readMessage(composer);
     if (!message) return;
@@ -737,7 +742,7 @@
   }, true);
 
   document.addEventListener("keydown", (event) => {
-    if (extensionPaused) return;
+    if (!privacyConsentAccepted || extensionPaused) return;
     const composer = findComposer();
     if (!composer || !composer.contains(event.target)) return;
     const isSendShortcut =
