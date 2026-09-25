@@ -31,6 +31,51 @@ Supported sites: ChatGPT, Claude, and Gemini.
 - **huggingface.co / hf.co host access:** Retrieves public model metadata and model data files only after user action. Outgoing messages and detection results are never included.
 - **ChatGPT, Claude, and Gemini site access:** Reads the outgoing composer and intercepts its send action solely to perform the user-facing local privacy check.
 
+### Where these go in the Developer Dashboard
+
+The Chrome Web Store Developer Dashboard splits justifications across a few
+different screens under **Privacy practices** for the listing. Paste the
+matching text above (or the copy-paste blocks below) into each field —
+reviewers reject listings where a permission is requested but not justified
+here.
+
+| Dashboard field | manifest source | What to paste |
+| --- | --- | --- |
+| Permission justification → **Storage** (covers `storage` + `unlimitedStorage`) | `permissions: ["storage", "unlimitedStorage"]` | storage + unlimitedStorage bullets combined (see block below) |
+| Permission justification → **Offscreen** | `permissions: ["offscreen"]` | offscreen bullet |
+| Permission justification → **Host permission** (per host, or combined) | `host_permissions` (huggingface.co / hf.co) | huggingface.co / hf.co bullet |
+| **Are you using remote code?** | `content_security_policy` | No — see "Remote code" note below |
+| Single purpose description | manifest `description` | Single purpose text above |
+| Data usage / "What user data do you plan to collect" | none (declares handling, not collection) | See "Privacy-practices answers" below |
+
+Copy-paste block for the **Storage** justification field (combine both
+permissions into one answer, since the dashboard asks for storage as a
+single item):
+
+```
+Storage is used to persist the user's selected local model, consent and
+pause preferences, a bounded set of local feedback entries, model download
+status, and up to 300 local diagnostic events — all on-device. Unlimited
+storage is required because the downloaded ONNX model files (tens to
+hundreds of MB) exceed Chrome's default extension storage quota. No data
+in storage is transmitted off-device.
+```
+
+Copy-paste block for the **Host permission** justification field:
+
+```
+Host access to huggingface.co, *.huggingface.co, and *.hf.co is used only
+to fetch public model configuration, tokenizer, and ONNX weight files after
+the user explicitly selects and downloads a model. No message content or
+detection results are ever sent in these requests.
+```
+
+**Remote code:** answer **No** to "Does your extension use remote code?" —
+the CSP (`manifest.json`) restricts `script-src` to `'self'` (plus
+`wasm-unsafe-eval` for the ONNX WASM runtime) and `connect-src` to the
+Hugging Face hosts, which are used only to fetch model data files, not
+executable scripts.
+
 ## Privacy-practices answers
 
 Declare that the extension handles:

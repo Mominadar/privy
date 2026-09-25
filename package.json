@@ -7,7 +7,9 @@
     "check": "node --check content.js && node --check background.js && node --check popup.js && node --check models.js && node --check logs.js && node --check offscreen.js && node --check model-policy.js && node --check model-prompts.js && node --check entity-normalization.js",
     "test": "node --test",
     "vendor": "node vendor-runtime.mjs",
-    "build": "npm run vendor && node build-extension.mjs"
+    "build": "npm run vendor && node build-extension.mjs",
+    "zip": "rm -f dist-extension.zip && cd dist-extension && zip -rq -X ../dist-extension.zip . -x '.*'",
+    "package": "npm run build && npm run zip"
   },
   "dependencies": {
     "@huggingface/transformers": "4.2.0"

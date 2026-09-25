@@ -5,3 +5,5 @@ node_modules/
 models/
 dist-extension/
 dist-extension.zip
+*.zip
+.DS_Store
