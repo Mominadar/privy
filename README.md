@@ -56,7 +56,8 @@ The popup links to a device-model page showing which approved model files are
 stored, their pinned revisions, and their expected SHA-256 hashes. When a scan
 finds PII, a confirmation modal displays the complete message with detected
 text highlighted. Users can select individual findings and send a placeholder-
-redacted message, send the original, or cancel.
+redacted message, send the original, or cancel. Placeholders in replies are
+mapped back to the original values on the device (see Reversible placeholders).
 
 Users can also highlight missed words in the confirmation modal, classify them
 as a person, organization, location, email, phone number, or other private
@@ -66,12 +67,68 @@ Protection can be paused or resumed from the popup or directly from the privacy
 confirmation modal. While paused, outgoing messages pass through without a local
 scan. Selecting text in a chat composer does not open a separate popup; missed
 PII classification remains available inside the confirmation modal.
-Contextual dates following labels such as `DOB`, `date of birth`, `born on`, or
-`birthday` are detected and replaced with `[DATE_OF_BIRTH]`.
-Deterministic contextual rules also cover self-introductions such as `I'm
-Momina`, `I am Momina`, or `my name is Momina`, plus employment phrases such as
-`working for UNICEF`. These rules catch common lowercase introductions even
-when a probabilistic NER model scores them below its confidence threshold.
+### Context-aware detection
+
+Detection combines the NER model with deterministic rules in
+[detection-rules.js](./detection-rules.js). Both are filtered for context so
+that ordinary messages are not interrupted:
+
+- Phone numbers need phone formatting, an international prefix, or nearby
+  context such as `call me at`; dates, versions, order numbers and timestamps
+  are ignored. Payment cards must pass the Luhn check, IBANs their checksum, and
+  IPv4 addresses must have valid octets.
+- Secrets cover common key formats (OpenAI, Anthropic, GitHub, AWS, Google,
+  Slack, Stripe, Hugging Face, JWT), high-entropy `api_`/`key_` strings, and
+  values assigned to `password`, `token` or `secret`. Environment-variable
+  references and placeholders such as `<your password>` are ignored. A private
+  key is redacted as the whole block, not only its header.
+- `I'm Momina` / `I am Momina` require a capitalized name, so `I'm happy` is not
+  a name; `my name is momina` also accepts lowercase. After `working for`/`works at`,
+  a capitalized employer is always accepted. A lowercase one (`working for
+  unicef`) is accepted only if the loaded model's tokenizer splits it into
+  pieces, which marks it as a rare word such as a name or acronym. Ordinary
+  words (`working for hours`, `work at home`) are single tokens and are ignored.
+- Dates are only private after birth-date labels such as `DOB`, `date of birth`,
+  `born on`, or `birthday`, and are replaced with a date-of-birth placeholder.
+- Model output drops `MISC` labels (languages, nationalities, events), tokenizer
+  fragments inside larger words, lowercase noise, greetings, and anything
+  inside Markdown code. Per-type confidence thresholds are in
+  [model-prompts.js](./model-prompts.js).
+- Organizations and locations count as private only when the same sentence ties
+  them to a person (`I live in Lahore`, `Ali works at Acme`). Without that
+  context, `Explain how Google ranks pages` does not open the confirmation
+  dialog. If the dialog opens for other findings, those values are listed
+  unselected.
+
+Transformers.js does not return character offsets for token classification,
+so model words are aligned to the message in reading order, preferring whole
+words. Long messages are split into chunks so that text beyond the model's
+512-token limit is still scanned.
+
+### Reversible placeholders
+
+**Send redacted** replaces each distinct value with a numbered placeholder such
+as `[PERSON_1]` or `[EMAIL_2]`. The same value always gets the same placeholder
+within a conversation, so the AI can still tell people apart. Only the
+placeholder leaves the device.
+
+The placeholder-to-value mapping is stored per conversation in
+`chrome.storage.local`. When the reply (or your own sent message) shows a known
+placeholder, it is swapped back to the original value in the page and lightly
+highlighted. Editable text, such as the composer, is never changed, so restored
+values cannot be sent back out by accident. Values already mapped in a
+conversation are redacted automatically if they appear in a later message.
+
+A new chat has no conversation id until its first message is sent, so its
+mapping is held as a draft and adopted by the next conversation URL that
+appears within five minutes. Mappings expire 30 days after a conversation was
+last used, with at most 200 conversations kept. Turning off **Show original
+values in AI replies** in the popup deletes all mappings and stops saving new
+ones; placeholders are still numbered within each message.
+
+Limitations: a reply restored on screen shows the real values, so text you copy
+from it contains them. If a site feature re-sends selected page text (for
+example, quoting a reply), that text is checked by the normal outgoing scan.
 
 The editable local detection policy, confidence threshold, and placeholder map
 are in [model-prompts.js](./model-prompts.js). The included NER
@@ -120,8 +177,34 @@ npm run build
 Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
 and select `dist-extension/`. Reload the extension after rebuilding.
 
-The `models/` directory is a legacy development cache and is not used by the
-browser extension. It should not be included in the Chrome Web Store package.
+The `models/` directory is a local development cache used only by the model
+evaluation suite. It is not used by the browser extension and is excluded
+from the Chrome Web Store package.
+
+### Model evaluation
+
+`npm run setup` installs dependencies, downloads the default model into
+`models/` (verified against the SHA-256 manifest in `model-policy.js`), and
+runs every test. `npm test` skips the model evaluation when the model has not
+been downloaded.
+
+`test/model-eval/cases.js` holds labelled messages: values that must be
+redacted and look-alikes that must not be. Each case runs through the same
+post-processing as the extension (`scan-pipeline.js`) on Node's ONNX runtime.
+
+```sh
+npm run models:download -- --all          # every approved model
+npm run test:model                        # default model
+PRIVY_EVAL_MODEL=Xenova/distilbert-base-multilingual-cased-ner-hrl npm run test:model
+
+# A candidate that is not yet approved: download at a pinned commit, which
+# prints file hashes for model-policy.js, then evaluate it.
+npm run models:download -- owner/model --revision <commit>
+PRIVY_EVAL_MODEL=owner/model npm run test:model
+```
+
+Cases marked `gap` are known limitations. They are reported as TODO and do
+not fail the suite.
 The build command creates a clean production directory without `node_modules/`
 or the legacy model cache.
 
@@ -130,7 +213,9 @@ and are excluded from the project and release package.
 
 ## Runtime files
 
-- `content.js` intercepts ChatGPT sends.
+- `content.js` intercepts sends on ChatGPT, Claude, and Gemini, and restores placeholders in replies.
+- `pseudonymization.js` assigns placeholders and restores them from the local mapping.
+- `detection-rules.js` contains the deterministic detectors and context filters.
 - `background.js` coordinates extension messaging and the setup lifecycle.
 - `offscreen.js` downloads, verifies, caches, and runs approved models.
 - `model-policy.js` is the immutable model allowlist and integrity manifest.

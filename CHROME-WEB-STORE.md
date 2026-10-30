@@ -16,6 +16,8 @@ candidates, IP addresses, API keys, and private keys before they are sent.
 
 - Detection and redaction happen locally in Chrome.
 - The user chooses whether to send a redacted message, the original, or nothing.
+- Redacted values become placeholders such as [PERSON_1]; replies are shown with
+  the original values restored on the device, so the values are never sent.
 - Users can classify missed private text and remember false positives locally.
 - Protection can be paused or resumed at any time.
 - Models are downloaded only after explicit user action.
@@ -25,7 +27,7 @@ Supported sites: ChatGPT, Claude, and Gemini.
 
 ## Permission justifications
 
-- **storage:** Stores the selected model, consent and pause preferences, bounded local feedback, model status, and up to 300 local diagnostic events.
+- **storage:** Stores the selected model, consent and pause preferences, bounded local feedback, per-conversation placeholder mappings (30-day retention), model status, and up to 300 local diagnostic events.
 - **unlimitedStorage:** Locally cached ONNX model files can exceed Chrome's normal extension storage quota.
 - **offscreen:** Runs the bundled Transformers.js and ONNX/WASM inference runtime outside the popup so local scans can complete when the popup is closed.
 - **huggingface.co / hf.co host access:** Retrieves public model metadata and model data files only after user action. Outgoing messages and detection results are never included.
@@ -54,8 +56,10 @@ single item):
 
 ```
 Storage is used to persist the user's selected local model, consent and
-pause preferences, a bounded set of local feedback entries, model download
-status, and up to 300 local diagnostic events — all on-device. Unlimited
+pause preferences, a bounded set of local feedback entries, per-conversation
+placeholder-to-value mappings used to show original values in replies
+(deleted after 30 days), model download status, and up to 300 local
+diagnostic events — all on-device. Unlimited
 storage is required because the downloaded ONNX model files (tens to
 hundreds of MB) exceed Chrome's default extension storage quota. No data
 in storage is transmitted off-device.
@@ -100,8 +104,11 @@ Replace its contact placeholder before hosting.
 1. Open the extension popup and accept the local-processing disclosure.
 2. Select an approved model and click **Download selected model**.
 3. Open ChatGPT, Claude, or Gemini and refresh the page after installing the extension.
-4. Send a test message such as `My name is Example Person and my email is example@example.com`.
+4. Send a test message such as `My name is Example Person and my email is example.person@gmail.com`.
+   (Reserved documentation domains such as `example.com` are intentionally not flagged.)
 5. The privacy confirmation modal should offer original, redacted, and cancel actions.
+6. Choose **Send redacted**. The site receives `[PERSON_1]` and `[EMAIL_1]`; the
+   reply is displayed with the original values restored locally.
 
 All executable code is packaged with the extension. Hugging Face downloads are
 limited to pinned configuration, tokenizer, and ONNX weight data. Repository

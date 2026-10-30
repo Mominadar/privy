@@ -1,6 +1,7 @@
 import { APPROVED_MODELS, DEFAULT_MODEL, getApprovedModel, modelFileUrl } from "./model-policy.js";
 import "./model-prompts.js";
-import { mergeAdjacentEntities, normalizeEntity } from "./entity-normalization.js";
+import { chunkText } from "./entity-normalization.js";
+import { findingsFromModelOutputs } from "./scan-pipeline.js";
 
 const CACHE_NAME = "verified-huggingface-models-v1";
 const MAX_DOWNLOAD_ATTEMPTS = 5;
@@ -384,119 +385,32 @@ async function deleteModel(modelId) {
   return { ok: true };
 }
 
-const patterns = [
-  ["EMAIL", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi],
-  ["PHONE", /(?<!\w)(?:\+?\d[\d ().-]{7,}\d)(?!\w)/g],
-  ["CREDIT_CARD", /\b(?:\d[ -]*?){13,19}\b/g],
-  ["IP_ADDRESS", /\b(?:\d{1,3}\.){3}\d{1,3}\b/g],
-  ["API_KEY", /\b(?:sk|pk|api)[_-][A-Za-z0-9_-]{16,}\b/g],
-  ["PRIVATE_KEY", /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
-];
-
-const dateOfBirthPattern = /\b(?:date\s+of\s+birth|dob|born\s+on|birthday)\s*(?:is|:|-)?\s*((?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)?\d{2}|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[,]?\s+(?:19|20)\d{2})\b/gi;
-
-function dateOfBirthFindings(text) {
-  return [...text.matchAll(dateOfBirthPattern)].map((match) => {
-    const value = match[1];
-    const start = match.index + match[0].lastIndexOf(value);
-    return {
-      type: "DATE_OF_BIRTH",
-      value,
-      source: "pattern-detector",
-      score: 1,
-      start,
-      end: start + value.length,
-    };
-  });
-}
-
-const contextualPatterns = [
-  [
-    "PERSON",
-    /\b(?:i['’]?m|i\s+am|my\s+name\s+is)\s+([A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*){0,2}?)(?=\s+(?:working|from|at|for|with|and|who|living|based)\b|[,.!?;:]|$)/gi,
-  ],
-  [
-    "ORGANIZATION",
-    /\b(?:work(?:ing)?|employed)\s+(?:at|for|with)\s+([A-Za-z][A-Za-z0-9&.'’-]*(?:\s+[A-Za-z][A-Za-z0-9&.'’-]*){0,3}?)(?=\s+(?:as|and|but|in|on|from|where|who)\b|[,.!?;:]|$)/gi,
-  ],
-];
-
-function contextualFindings(text) {
-  return contextualPatterns.flatMap(([type, regex]) =>
-    [...text.matchAll(regex)].map((match) => {
-      const value = match[1];
-      const start = match.index + match[0].lastIndexOf(value);
-      return {
-        type,
-        value,
-        source: "pattern-detector",
-        score: 1,
-        start,
-        end: start + value.length,
-      };
-    })
-  );
-}
-
-function patternFindings(text) {
-  return patterns.flatMap(([type, regex]) =>
-    [...text.matchAll(regex)].map((match) => ({
-      type,
-      value: match[0],
-      source: "pattern-detector",
-      score: 1,
-      start: match.index,
-      end: match.index + match[0].length,
-    }))
-  );
-}
-
-function deduplicate(findings) {
-  const seen = new Set();
-  return findings.filter((item) => {
-    if (!item.value || item.score < detectionInstructions.minimumConfidence) return false;
-    const containedByPattern = item.source !== "pattern-detector" && findings.some((candidate) =>
-      candidate.source === "pattern-detector" &&
-      Number.isInteger(item.start) &&
-      Number.isInteger(item.end) &&
-      candidate.start <= item.start &&
-      candidate.end >= item.end
-    );
-    if (containedByPattern) return false;
-    const key = `${item.type}:${item.value.toLowerCase()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 async function scan(text, modelId) {
   const model = await getModelPolicy(modelId);
   if (!model) throw new Error("Unknown local model");
   if (!(await isModelReady(modelId))) throw new Error("MODEL_NOT_READY");
 
+  const chunks = chunkText(text);
   let detector;
-  let output;
+  let outputs;
   try {
     detector = await ensureModelPipeline(modelId, model);
-    output = await detector(text, { aggregation_strategy: "simple" });
+    outputs = await detector(chunks.map((chunk) => chunk.text), { aggregation_strategy: "simple" });
   } catch (error) {
     loadedPipelines.delete(modelId);
     await diagnosticLog("error", "model-scan-failed", modelId, runtimeErrorDetail(error));
-    throw new Error(`Custom model scan failed: ${error.message || String(error)}`);
+    throw new Error(`Local model scan failed: ${error.message || String(error)}`);
   }
-  const entities = mergeAdjacentEntities(
-    output.map((item) => normalizeEntity(item, modelId, text)),
-    text
-  );
-  const findings = deduplicate([
-    ...patternFindings(text),
-    ...dateOfBirthFindings(text),
-    ...contextualFindings(text),
-    ...entities,
-  ]);
+  const findings = findingsFromModelOutputs({
+    text,
+    chunks,
+    outputs,
+    modelId,
+    policy: detectionInstructions,
+    isSingleToken: (word) => detector.tokenizer.tokenize(word).length === 1,
+  });
   return {
-    hasPrivateInfo: findings.length > 0,
+    hasPrivateInfo: findings.some((item) => !item.weak),
     findings,
     model: modelId,
     policy: detectionInstructions.policyText,

@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check content.js && node --check background.js && node --check popup.js && node --check models.js && node --check logs.js && node --check offscreen.js && node --check model-policy.js && node --check model-prompts.js && node --check entity-normalization.js",
+    "check": "node --check content.js && node --check background.js && node --check popup.js && node --check models.js && node --check logs.js && node --check offscreen.js && node --check model-policy.js && node --check model-prompts.js && node --check entity-normalization.js && node --check detection-rules.js && node --check pseudonymization.js && node --check scan-pipeline.js",
     "test": "node --test",
+    "models:download": "node scripts/download-models.mjs",
+    "test:model": "node --test test/model-eval.test.js",
+    "setup": "npm install && npm run models:download && npm test",
     "vendor": "node vendor-runtime.mjs",
     "build": "npm run vendor && node build-extension.mjs",
     "zip": "rm -f dist-extension.zip && cd dist-extension && zip -rq -X ../dist-extension.zip . -x '.*'",

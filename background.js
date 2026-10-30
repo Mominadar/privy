@@ -197,6 +197,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           "modelError",
           "extensionPaused",
           "privacyConsentAccepted",
+          "privyVaults",
+          "restoreResponses",
         ]);
         await chrome.storage.local.set({
           selectedModel: DEFAULT_MODEL,

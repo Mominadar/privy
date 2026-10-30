@@ -63,3 +63,8 @@ progress.active { display: block; }
 .platform-links a { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #34443d; border-radius: 10px; background: #19211e; transition: border-color .15s, transform .15s; }
 .platform-links a:hover { border-color: #75d7aa; transform: translateY(-1px); }
 .platform-links img { display: block; width: 20px; height: 20px; object-fit: contain; }
+
+.setting { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; font-size: 12px; line-height: 1.4; cursor: pointer; }
+.setting input { width: auto; margin: 2px 0 0; padding: 0; accent-color: #24a36a; }
+.setting small { display: block; margin-top: 3px; color: #9db0a7; font-size: 10px; }
+.link-button { width: auto; margin: 6px 0 0 25px; padding: 0; background: transparent; color: #75d7aa; font-size: 11px; text-decoration: underline; }

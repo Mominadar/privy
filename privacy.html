@@ -9,7 +9,7 @@
   <body>
     <main>
       <h1>Privy Local Privacy Guard — Privacy Policy</h1>
-      <p class="updated">Effective July 23, 2026</p>
+      <p class="updated">Effective October 13, 2026</p>
 
       <h2>Summary</h2>
       <p>
@@ -28,6 +28,14 @@
         to 300 diagnostic events in Chrome extension storage. Diagnostic events
         are designed not to include message text or detected values.
       </p>
+      <p>
+        When you send a redacted message, each replaced value is given a
+        placeholder such as <code>[PERSON_1]</code>. Only the placeholder is sent
+        to the chat website. So that replies can show the original values, the
+        placeholder-to-value mapping for that conversation is stored in Chrome
+        extension storage on your device and is used to replace placeholders in
+        the page you see. The mapping is never transmitted.
+      </p>
 
       <h2>Network activity</h2>
       <p>
@@ -43,8 +51,10 @@
         Model files and extension preferences remain on the device until the
         user deletes them or removes the extension. “Delete all local model
         data” removes cached models, adaptive feedback, diagnostic logs, custom
-        model configuration, and protection preferences. Logs and adaptive
-        entries are also bounded by local retention limits.
+        model configuration, placeholder mappings, and protection preferences.
+        Logs and adaptive entries are also bounded by local retention limits.
+        Placeholder mappings are deleted automatically 30 days after a
+        conversation was last used, and are limited to 200 conversations.
       </p>
 
       <h2>Limited Use</h2>
@@ -60,8 +70,9 @@
       <p>
         Protection can be paused or resumed at any time. Users can send an
         original message, send a redacted version, cancel sending, clear learned
-        feedback, clear diagnostic logs, delete all local model data, or
-        uninstall the extension.
+        feedback, clear diagnostic logs, turn off restoring original values
+        (which also deletes stored placeholder mappings), clear placeholder
+        mappings, delete all local model data, or uninstall the extension.
       </p>
 
       <h2>Contact</h2>

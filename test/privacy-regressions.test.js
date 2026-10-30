@@ -12,6 +12,8 @@ test("Delete all local data removes logs, learning, model configuration, and pro
     "customModel",
     "extensionPaused",
     "privacyConsentAccepted",
+    "privyVaults",
+    "restoreResponses",
   ]) {
     assert.match(source, new RegExp(`chrome\\.storage\\.local\\.remove\\([\\s\\S]*"${key}"`));
   }
@@ -28,14 +30,19 @@ test("message interception requires affirmative privacy consent", async () => {
   assert.match(source, /if \(!privacyConsentAccepted \|\| extensionPaused\) return;/);
 });
 
+test("a stalled model scan has a timeout and cannot block sending indefinitely", async () => {
+  const source = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  assert.match(source, /Promise\.race\(\[\s*chrome\.runtime\.sendMessage\(\{ type: "scan-message"/);
+});
+
+test("restored values are never written into editable composer text", async () => {
+  const source = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  assert.match(source, /parent\.isContentEditable \|\| parent\.closest\("textarea, input/);
+});
+
 test.todo("Replacing a custom model removes the prior custom model's orphaned cached files");
 test.todo("cached model readiness re-verifies content hashes rather than checking presence only");
 test.todo("large model downloads do not retain both all chunks and a second full-size buffer");
 test.todo("download progress updates are throttled to avoid one storage write per network chunk");
 test.todo("download cancellation interrupts retry backoff immediately");
-test.todo("learned private terms match token boundaries and do not redact substrings such as Ann in annual");
-test.todo("IPv4 detection rejects octets above 255");
-test.todo("payment-card detection validates candidate numbers before redaction");
-test.todo("contextual name and organization rules support Unicode scripts and accented letters");
-test.todo("a stalled model scan has a timeout and cannot block sending indefinitely");
 test.todo("loaded inference pipelines dispose GPU and WASM resources during deletion");

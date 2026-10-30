@@ -39,7 +39,8 @@
         "https://claude.ai/*",
         "https://gemini.google.com/*"
       ],
-      "js": ["model-prompts.js", "content.js"],
+      "js": ["model-prompts.js", "pseudonymization.js", "content.js"],
+      "css": ["content.css"],
       "run_at": "document_start"
     }
   ],

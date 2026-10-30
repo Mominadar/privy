@@ -54,10 +54,18 @@
         <div><dt>Integrity</dt><dd id="integrity">SHA-256 verified</dd></div>
       </dl>
       <button id="toggle-protection" class="secondary" type="button">Pause protection</button>
+      <label class="setting" for="restore-responses">
+        <input id="restore-responses" type="checkbox" checked />
+        <span>
+          Show original values in AI replies
+          <small>Placeholders like [PERSON_1] are mapped back on this device. The mapping is kept locally for 30 days and never sent.</small>
+        </span>
+      </label>
+      <button id="clear-mappings" class="link-button" type="button">Clear saved placeholder mappings</button>
       <button id="prepare" type="button">Download selected model</button>
       <button id="remove" class="secondary" type="button">Delete all local model data</button>
       <a class="model-link" href="models.html" target="_blank">View downloaded models on this device</a>
-      <p class="note">Model files, message checks, and false-positive feedback stay on this device.</p>
+      <p class="note">Model files, message checks, placeholder mappings, and false-positive feedback stay on this device.</p>
       <nav class="supported-platforms" aria-label="Supported AI websites">
         <span>Works with</span>
         <div class="platform-links">

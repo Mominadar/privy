@@ -2,7 +2,15 @@
   "use strict";
 
   const instructions = globalThis.PrivyModelPrompts;
+  const pseudo = globalThis.PrivyPseudonymization;
   const MAX_LOCAL_FEEDBACK = 500;
+  const SCAN_TIMEOUT_MS = 120_000;
+  const VAULT_STORAGE_KEY = "privyVaults";
+  const VAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const MAX_VAULTS = 200;
+  // A new chat has no URL id until the first message is sent; its mapping is
+  // stored as a draft and adopted by the conversation id that appears next.
+  const DRAFT_ADOPTION_WINDOW_MS = 5 * 60 * 1000;
   const SITE_ADAPTERS = {
     "chatgpt.com": {
       name: "ChatGPT",
@@ -38,10 +46,15 @@
   let scanInProgress = false;
   let extensionPaused = false;
   let privacyConsentAccepted = false;
+  let restoreResponses = true;
+  let vaults = {};
 
-  chrome.storage.local.get(["extensionPaused", "privacyConsentAccepted"]).then((stored) => {
+  chrome.storage.local.get(["extensionPaused", "privacyConsentAccepted", "restoreResponses", VAULT_STORAGE_KEY]).then((stored) => {
     extensionPaused = Boolean(stored.extensionPaused);
     privacyConsentAccepted = Boolean(stored.privacyConsentAccepted);
+    restoreResponses = stored.restoreResponses !== false;
+    vaults = stored[VAULT_STORAGE_KEY] || {};
+    scheduleFullRestore();
   }).catch(() => {});
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.extensionPaused) {
@@ -49,6 +62,14 @@
     }
     if (changes.privacyConsentAccepted) {
       privacyConsentAccepted = Boolean(changes.privacyConsentAccepted.newValue);
+    }
+    if (changes.restoreResponses) {
+      restoreResponses = changes.restoreResponses.newValue !== false;
+      scheduleFullRestore();
+    }
+    if (changes[VAULT_STORAGE_KEY]) {
+      vaults = changes[VAULT_STORAGE_KEY].newValue || {};
+      scheduleFullRestore();
     }
   });
 
@@ -113,16 +134,21 @@
     );
   }
 
-  async function scanMessage(text) {
+  async function scanMessage(text, vault) {
     const { selectedModel } = await chrome.storage.local.get("selectedModel");
-    const response = await chrome.runtime.sendMessage({
-      type: "scan-message",
-      text,
-      model: selectedModel,
+    let timer;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(
+        `Local scan did not finish within ${SCAN_TIMEOUT_MS / 1000} seconds`
+      )), SCAN_TIMEOUT_MS);
     });
+    const response = await Promise.race([
+      chrome.runtime.sendMessage({ type: "scan-message", text, model: selectedModel }),
+      timeout,
+    ]).finally(() => clearTimeout(timer));
     if (!response?.ok) throw new Error(response?.error || "Local scan failed");
     await chrome.storage.local.set({ modelStatus: "ready" });
-    return applyLocalFeedback(response.result, text);
+    return applyLocalFeedback(response.result, text, vault);
   }
 
   function normalizeFeedbackValue(finding) {
@@ -150,36 +176,31 @@
   }
 
   function learnedPrivateFindings(message, privateEntries) {
-    const findings = [];
-    const lowerMessage = message.toLocaleLowerCase();
-    for (const entry of privateEntries) {
+    return privateEntries.flatMap((entry) => {
       const value = String(entry.value || "").trim();
-      if (!value) continue;
-      const lowerValue = value.toLocaleLowerCase();
-      let start = 0;
-      while ((start = lowerMessage.indexOf(lowerValue, start)) !== -1) {
-        findings.push({
-          type: entry.type || "PRIVATE_ENTITY",
-          value: message.slice(start, start + value.length),
-          source: "local-user-classification",
-          score: 1,
-          start,
-          end: start + value.length,
-        });
-        start += Math.max(1, value.length);
-      }
-    }
-    return findings;
+      return pseudo.findWholeWord(message, value).map((start) => ({
+        type: entry.type || "PRIVATE_ENTITY",
+        value: message.slice(start, start + value.length),
+        source: "local-user-classification",
+        score: 1,
+        start,
+        end: start + value.length,
+      }));
+    });
   }
 
-  async function applyLocalFeedback(result, message) {
+  async function applyLocalFeedback(result, message, vault) {
     const { salt, entries, privateEntries } = await feedbackState();
-    const combined = [...result.findings, ...learnedPrivateFindings(message, privateEntries)];
+    const combined = [
+      ...result.findings,
+      ...learnedPrivateFindings(message, privateEntries),
+      ...pseudo.vaultFindings(message, vault),
+    ];
     const keep = await Promise.all(combined.map(async (finding) =>
       !entries[await feedbackHash(finding, salt)]
     ));
     const findings = combined.filter((_finding, index) => keep[index]);
-    return { ...result, findings, hasPrivateInfo: findings.length > 0 };
+    return { ...result, findings, hasPrivateInfo: findings.some((finding) => !finding.weak) };
   }
 
   async function rememberNotPrivate(finding) {
@@ -205,7 +226,6 @@
 
   function findingRanges(message, findings, includedIndexes = null) {
     const ranges = [];
-    const lowerMessage = message.toLocaleLowerCase();
     findings.forEach((finding, index) => {
       if (includedIndexes && !includedIndexes.has(index)) return;
       const value = String(finding.value || "");
@@ -225,16 +245,13 @@
         });
         return;
       }
-      const lowerValue = value.toLocaleLowerCase();
-      let start = 0;
-      while ((start = lowerMessage.indexOf(lowerValue, start)) !== -1) {
+      for (const start of pseudo.findWholeWord(message, value)) {
         ranges.push({
           start,
-          end: start + value.length,
+          end: start + value.trim().length,
           types: new Set([finding.type]),
           indexes: new Set([index]),
         });
-        start += Math.max(1, value.length);
       }
     });
     ranges.sort((a, b) => a.start - b.start || b.end - a.end);
@@ -267,24 +284,19 @@
     if (cursor < message.length) container.append(document.createTextNode(message.slice(cursor)));
   }
 
-  function redactedMessage(message, findings, selected) {
-    const ranges = findingRanges(message, findings, selected);
-    let cursor = 0;
-    let output = "";
-    for (const range of ranges) {
-      output += message.slice(cursor, range.start);
-      const type = [...range.types][0];
-      output += instructions.placeholders[type] || instructions.placeholders.PRIVATE_ENTITY;
-      cursor = range.end;
-    }
-    return output + message.slice(cursor);
+  /** Replaces selected findings with numbered tokens, recording them in `vault`. */
+  function redactedMessage(message, findings, selected, vault) {
+    const ranges = findingRanges(message, findings, selected)
+      .map((range) => ({ start: range.start, end: range.end, type: [...range.types][0] }));
+    return pseudo.pseudonymize(message, ranges, vault, instructions.placeholders);
   }
 
-  function showPrivacyModal(message, result) {
+  function showPrivacyModal(message, result, vault) {
     return new Promise((resolve) => {
       const findings = [...result.findings];
       const active = new Set(findings.map((_finding, index) => index));
-      const selected = new Set(active);
+      // Context-free organizations and locations are listed but not pre-selected.
+      const selected = new Set([...active].filter((index) => !findings[index].weak));
       const host = document.createElement("div");
       host.id = "privy-pii-confirmation";
       const shadow = host.attachShadow({ mode: "closed" });
@@ -322,6 +334,7 @@
           .finding label { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 13px; }
           .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .type { color: #65746c; font-size: 10px; }
+          .weak-note { color: #8a6a1c; }
           button { padding: 10px 14px; border-radius: 9px; border: 1px solid #cad4cf; font: 600 13px/1 system-ui, sans-serif; cursor: pointer; }
           .not-pii { padding: 7px 9px; background: #fff; color: #526159; font-size: 11px; }
           .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; column-gap: 12px; row-gap: 10px; margin-top: 16px; }
@@ -340,13 +353,13 @@
               <a class="platform" href="https://gemini.google.com/" target="_blank" rel="noreferrer"><img class="platform-icon" src="${chrome.runtime.getURL("platform-icons/gemini.svg")}" alt="">Gemini</a>
             </nav>
             <h2 id="privy-title">Private information detected</h2>
-            <p id="privy-description" class="lead">Choose which detected values to replace, send the original message, or cancel.</p>
+            <p id="privy-description" class="lead">Choose which detected values to replace with placeholders, send the original message, or cancel.</p>
             <p class="message-label">Original message</p>
             <div class="message" aria-label="Message with private information highlighted"></div>
             <p class="hint">Red highlights will be replaced. Yellow highlights will remain unchanged.</p>
             <p class="message-label">Redacted message preview</p>
             <div class="message redacted-preview" aria-label="Redacted message preview" aria-live="polite"></div>
-            <p class="hint">This is the exact message that “Send redacted” will send.</p>
+            <p class="hint restore-hint">This is the exact message that “Send redacted” will send.</p>
             <details class="detected-details">
               <summary>Detected PII <span class="summary-meta detected-count"></span></summary>
               <div class="findings"></div>
@@ -393,7 +406,11 @@
       const detectedCount = shadow.querySelector(".detected-count");
       let pendingSelection = null;
       let pointerSelectionStart = null;
+      const restoreHint = shadow.querySelector(".restore-hint");
       selectionInput.value = message;
+      if (restoreResponses) {
+        restoreHint.textContent = "This is the exact message that “Send redacted” will send. Placeholders in the reply are swapped back to the original values on this device only.";
+      }
       pauseButton.textContent = extensionPaused ? "Resume protection" : "Pause protection";
 
       if (!messageBox || !redactedPreview || !findingsBox || !redactedButton || !cancelButton || !originalButton || !backdrop) {
@@ -404,7 +421,8 @@
 
       function render() {
         appendHighlightedMessage(messageBox, message, findings, selected, active);
-        redactedPreview.textContent = redactedMessage(message, findings, selected);
+        const previewVault = pseudo.cloneVault(vault);
+        redactedPreview.textContent = redactedMessage(message, findings, selected, previewVault);
         findingsBox.replaceChildren();
         for (const index of active) {
           const finding = findings[index];
@@ -424,8 +442,16 @@
           value.textContent = finding.value;
           const type = document.createElement("span");
           type.className = "type";
-          type.textContent = `${finding.type} → ${instructions.placeholders[finding.type] || instructions.placeholders.PRIVATE_ENTITY}`;
+          type.textContent = selected.has(index)
+            ? `${finding.type} → ${pseudo.tokenFor(previewVault, finding.type, finding.value, instructions.placeholders)}`
+            : `${finding.type} → kept as written`;
           description.append(value, document.createElement("br"), type);
+          if (finding.weak) {
+            const note = document.createElement("span");
+            note.className = "type weak-note";
+            note.textContent = " · no personal context detected";
+            description.append(note);
+          }
           label.append(checkbox, description);
           const notPii = document.createElement("button");
           notPii.type = "button";
@@ -571,10 +597,14 @@
         pauseButton.disabled = false;
       });
       originalButton.addEventListener("click", () => finish({ action: "original", message }));
-      redactedButton.addEventListener("click", () => finish({
-        action: "redacted",
-        message: redactedMessage(message, findings, selected),
-      }));
+      redactedButton.addEventListener("click", () => {
+        const sendVault = pseudo.cloneVault(vault);
+        finish({
+          action: "redacted",
+          message: redactedMessage(message, findings, selected, sendVault),
+          vault: sendVault,
+        });
+      });
       backdrop.addEventListener("click", (event) => {
         if (event.target.classList.contains("backdrop")) finish({ action: "cancel" });
       });
@@ -679,20 +709,166 @@
     }
   }
 
+  // --- Reversible placeholder mapping -------------------------------------
+
+  function currentConversationId() {
+    return pseudo.conversationId(location.hostname, location.pathname);
+  }
+
+  function vaultKey(conversation) {
+    return `${location.hostname}/${conversation || "draft"}`;
+  }
+
+  function vaultFor(conversation) {
+    return pseudo.createVault(vaults[vaultKey(conversation)]?.entries);
+  }
+
+  function pruneVaults(all) {
+    const cutoff = Date.now() - VAULT_TTL_MS;
+    return Object.fromEntries(
+      Object.entries(all)
+        .filter(([, stored]) => stored?.updatedAt > cutoff)
+        .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
+        .slice(0, MAX_VAULTS)
+    );
+  }
+
+  async function saveVault(conversation, vault, removeKey = null) {
+    const stored = await chrome.storage.local.get(VAULT_STORAGE_KEY);
+    const all = stored[VAULT_STORAGE_KEY] || {};
+    all[vaultKey(conversation)] = { updatedAt: Date.now(), entries: vault.entries };
+    if (removeKey) delete all[removeKey];
+    vaults = pruneVaults(all);
+    await chrome.storage.local.set({ [VAULT_STORAGE_KEY]: vaults });
+  }
+
+  let lastConversationId = currentConversationId();
+
+  async function followConversationChanges() {
+    const conversation = currentConversationId();
+    if (conversation === lastConversationId) return;
+    lastConversationId = conversation;
+    const draft = vaults[vaultKey(null)];
+    if (conversation && draft && Date.now() - draft.updatedAt < DRAFT_ADOPTION_WINDOW_MS) {
+      const adopted = vaultFor(conversation);
+      for (const [key, entry] of Object.entries(draft.entries)) adopted.entries[key] ??= entry;
+      await saveVault(conversation, adopted, vaultKey(null));
+    }
+    scheduleFullRestore();
+  }
+
+  setInterval(() => { void followConversationChanges().catch(() => {}); }, 1000);
+
+  // Tokens in rendered text are swapped back in place. Only text node values
+  // change (no wrapper elements), so the chat app's own rendering is not
+  // disturbed; the CSS Custom Highlight API marks restored values.
+  const restoredHighlight = typeof Highlight === "function" && globalThis.CSS?.highlights
+    ? new Highlight()
+    : null;
+  if (restoredHighlight) CSS.highlights.set("privy-restored", restoredHighlight);
+  const pendingRestoreNodes = new Set();
+  let restoreScheduled = false;
+  const TOKEN_HINT = /[A-Z]_\d/;
+
+  function vaultForNode(node) {
+    const href = node.parentElement?.closest("a[href]")?.getAttribute("href");
+    if (href) {
+      try {
+        const linked = pseudo.conversationId(location.hostname, new URL(href, location.href).pathname);
+        if (linked) return vaults[vaultKey(linked)];
+      } catch {
+        // Ignore malformed links.
+      }
+    }
+    return vaults[vaultKey(currentConversationId())];
+  }
+
+  function restoreTextNode(node) {
+    if (!TOKEN_HINT.test(node.nodeValue)) return;
+    const parent = node.parentElement;
+    // Never touch editable text: restored values must not be sent back out.
+    if (!parent || parent.isContentEditable || parent.closest("textarea, input, script, style, noscript")) return;
+    const vault = vaultForNode(node);
+    if (!vault) return;
+    const { text, restored } = pseudo.restore(node.nodeValue, vault);
+    if (!restored.length) return;
+    node.nodeValue = text;
+    if (!restoredHighlight) return;
+    for (const { start, end } of restored) {
+      const range = new Range();
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      restoredHighlight.add(range);
+    }
+  }
+
+  function flushRestore() {
+    restoreScheduled = false;
+    const roots = [...pendingRestoreNodes];
+    pendingRestoreNodes.clear();
+    if (!restoreResponses) return;
+    for (const root of roots) {
+      if (!root.isConnected) continue;
+      if (root.nodeType === Node.TEXT_NODE) {
+        restoreTextNode(root);
+        continue;
+      }
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) restoreTextNode(walker.currentNode);
+    }
+    if (restoredHighlight) {
+      for (const range of restoredHighlight) {
+        if (range.collapsed || !range.startContainer.isConnected) restoredHighlight.delete(range);
+      }
+    }
+  }
+
+  function scheduleRestore(node) {
+    pendingRestoreNodes.add(node);
+    if (restoreScheduled) return;
+    restoreScheduled = true;
+    // rAF does not fire in background tabs; the timer keeps streaming replies current.
+    setTimeout(flushRestore, 50);
+  }
+
+  function scheduleFullRestore() {
+    if (document.body) scheduleRestore(document.body);
+  }
+
+  const restoreObserver = new MutationObserver((mutations) => {
+    if (!restoreResponses || !Object.keys(vaults).length) return;
+    for (const mutation of mutations) {
+      if (mutation.type === "characterData") scheduleRestore(mutation.target);
+      else mutation.addedNodes.forEach(scheduleRestore);
+    }
+  });
+
+  function startRestoring() {
+    restoreObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    scheduleFullRestore();
+  }
+
+  if (document.body) startRestoring();
+  else document.addEventListener("DOMContentLoaded", startRestoring, { once: true });
+
   async function approveAndSend(message, sendButton, originalComposer) {
     if (scanInProgress) return;
     scanInProgress = true;
 
     try {
-      const result = await scanMessage(message);
+      const conversation = currentConversationId();
+      const vault = restoreResponses ? vaultFor(conversation) : pseudo.createVault();
+      const result = await scanMessage(message, vault);
       let outgoingMessage = message;
       if (result.hasPrivateInfo) {
-        const choice = await showPrivacyModal(message, result);
+        const choice = await showPrivacyModal(message, result, vault);
         if (choice.action === "cancel") {
           if (choice.error) window.alert(`The privacy confirmation could not open (${choice.error}). The message was not sent.`);
           return;
         }
         outgoingMessage = choice.message;
+        // Saved before sending so the streamed reply can be restored immediately.
+        if (choice.vault && restoreResponses) await saveVault(conversation, choice.vault);
       }
 
       if (outgoingMessage !== message) {

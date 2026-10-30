@@ -15,6 +15,8 @@ const customModelError = document.querySelector("#custom-model-error");
 const toggleProtectionButton = document.querySelector("#toggle-protection");
 const privacyConsent = document.querySelector("#privacy-consent");
 const acceptPrivacyButton = document.querySelector("#accept-privacy");
+const restoreResponsesInput = document.querySelector("#restore-responses");
+const clearMappingsButton = document.querySelector("#clear-mappings");
 let customModel = null;
 let currentStatus = "not-downloaded";
 let extensionPaused = false;
@@ -220,7 +222,9 @@ async function initialize() {
     "modelError",
     "extensionPaused",
     "privacyConsentAccepted",
+    "restoreResponses",
   ]);
+  restoreResponsesInput.checked = stored.restoreResponses !== false;
   if (stored.customModel) addCustomModelOption(stored.customModel);
   modelSelect.value = APPROVED_MODELS[stored.selectedModel] || stored.customModel?.id === stored.selectedModel
     ? stored.selectedModel
@@ -246,6 +250,9 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.privacyConsentAccepted) {
     renderPrivacyConsent(changes.privacyConsentAccepted.newValue);
   }
+  if (changes.restoreResponses) {
+    restoreResponsesInput.checked = changes.restoreResponses.newValue !== false;
+  }
 });
 
 modelSelect.addEventListener("change", async () => {
@@ -265,6 +272,17 @@ toggleProtectionButton.addEventListener("click", async () => {
   } finally {
     toggleProtectionButton.disabled = false;
   }
+});
+restoreResponsesInput.addEventListener("change", async () => {
+  const enabled = restoreResponsesInput.checked;
+  await chrome.storage.local.set({ restoreResponses: enabled });
+  // Turning restoration off also discards the stored value mappings.
+  if (!enabled) await chrome.storage.local.remove("privyVaults");
+});
+clearMappingsButton.addEventListener("click", async () => {
+  clearMappingsButton.disabled = true;
+  await chrome.storage.local.remove("privyVaults");
+  clearMappingsButton.textContent = "Placeholder mappings cleared";
 });
 acceptPrivacyButton.addEventListener("click", async () => {
   acceptPrivacyButton.disabled = true;
