@@ -64,7 +64,7 @@ export function isLikelyPhone(value, text, start) {
 }
 
 function phoneFindings(text) {
-  return [...text.matchAll(/(?<![\w.+])\+?\(?\d[\d ().-]{5,}\d(?![\w.])/g)]
+  return [...text.matchAll(/(?<![\w.+])\+?\(?\d[\d ().-]{5,}\d(?!\w|\.\d)/g)]
     .map((match) => ({ value: match[0].trimEnd(), index: match.index }))
     .filter(({ value, index }) => isLikelyPhone(value, text, index))
     .map(({ value, index }) => finding("PHONE", value, index));
@@ -125,7 +125,7 @@ export function isValidIpv4(value) {
 }
 
 function ipFindings(text) {
-  return [...text.matchAll(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g)]
+  return [...text.matchAll(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\w)/g)]
     .filter((match) =>
       isValidIpv4(match[0]) &&
       !NON_IDENTIFYING_IPS.has(match[0]) &&
@@ -263,6 +263,26 @@ export function isOrdinaryWord(word, isSingleToken) {
   });
 }
 
+const COMPANY_SUFFIX = new Set(["inc", "corp", "ltd", "co", "llc", "plc", "gmbh", "sa", "ag", "bv", "nv", "pty", "pvt"]);
+
+/** "Initech Corp. You" -> "Initech Corp."; "Acme. Then" -> "Acme". */
+export function trimEmployer(value) {
+  const words = value.split(/\s+/);
+  const kept = [];
+  for (const word of words) {
+    if (!word.endsWith(".") || /\.[^.]/.test(word)) { kept.push(word); continue; }
+    const bare = word.slice(0, -1);
+    kept.push(COMPANY_SUFFIX.has(bare.toLowerCase()) ? word : bare);
+    break;
+  }
+  return kept.join(" ");
+}
+
+function employerFinding(match) {
+  const trimmed = trimEmployer(match[1]);
+  return finding("ORGANIZATION", trimmed, match.index + match[0].lastIndexOf(match[1]));
+}
+
 function contextualFindings(text, { isSingleToken } = {}) {
   const names = CONTEXTUAL_PATTERNS.flatMap(([type, regex]) =>
     [...text.matchAll(regex)]
@@ -271,7 +291,7 @@ function contextualFindings(text, { isSingleToken } = {}) {
   );
   const employers = [...text.matchAll(CAPITALIZED_EMPLOYER)]
     .filter((match) => !NOT_A_NAME.has(match[1].split(/\s+/)[0].toLowerCase()))
-    .map((match) => groupFinding("ORGANIZATION", match));
+    .map(employerFinding);
   // "working for unicef": without a vocabulary to separate it from "working
   // for hours", lowercase employers are skipped rather than guessed.
   const lowercaseEmployers = isSingleToken

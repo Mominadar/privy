@@ -48,6 +48,20 @@ test("phone numbers need phone formatting, an international prefix, or context",
   assert.deepEqual(found("(555) 123-4567"), [["PHONE", "(555) 123-4567"]]);
 });
 
+test("identifiers at the end of a sentence are still detected", () => {
+  assert.deepEqual(found("Call me on (415) 555-2938. Thanks"), [["PHONE", "(415) 555-2938"]]);
+  assert.deepEqual(found("My number is +92 300 1234567."), [["PHONE", "+92 300 1234567"]]);
+  assert.deepEqual(found("The host is 10.0.0.25."), [["IP_ADDRESS", "10.0.0.25"]]);
+  assert.deepEqual(found("Version 1.2.3.4.5 shipped."), []);
+});
+
+test("employer names stop at the end of the sentence", () => {
+  assert.deepEqual(found("I work at Initech Corp. You can reach me"), [["ORGANIZATION", "Initech Corp."]]);
+  assert.deepEqual(found("I work at Acme Corp and love it"), [["ORGANIZATION", "Acme Corp"]]);
+  assert.deepEqual(found("She works at Oxfam. Then she left"), [["ORGANIZATION", "Oxfam"]]);
+  assert.deepEqual(found("I work for Johnson & Johnson. Great"), [["ORGANIZATION", "Johnson & Johnson"]]);
+});
+
 test("IPv4 detection rejects octets above 255", () => {
   assert.equal(isValidIpv4("192.168.1.20"), true);
   assert.equal(isValidIpv4("999.1.2.3"), false);
