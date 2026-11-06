@@ -10,8 +10,10 @@ globalThis.PrivyModelPrompts = Object.freeze({
   policyText: `
 Detect personally identifiable information in an outgoing message.
 Treat people, dates of birth, email addresses, phone numbers, payment-card
-and bank account numbers, IP addresses, API keys, passwords, and private keys
-as sensitive. Treat organizations and locations as sensitive only when the
+and bank account numbers, government IDs, IP and MAC addresses, internal
+hostnames, cloud account IDs and resource identifiers (AWS account IDs, ARNs,
+instance IDs), connection strings, usernames in file paths, API keys,
+passwords, and private keys as sensitive. Treat organizations and locations as sensitive only when the
 message ties them to a person. Ignore identifiers inside code, version
 numbers, dates, and other look-alikes. Prefer warning the user when confidence
 is high. Never transmit the message, findings, mappings, or user feedback
@@ -56,6 +58,12 @@ outside this device.
     PRIVATE_URL: "[PRIVATE_URL]",
     ACCOUNT_NUMBER: "[ACCOUNT_NUMBER]",
     SECRET: "[SECRET]",
+    CLOUD_ACCOUNT_ID: "[CLOUD_ACCOUNT_ID]",
+    CLOUD_RESOURCE: "[CLOUD_RESOURCE]",
+    INTERNAL_HOST: "[INTERNAL_HOST]",
+    MAC_ADDRESS: "[MAC_ADDRESS]",
+    USERNAME: "[USERNAME]",
+    NATIONAL_ID: "[NATIONAL_ID]",
     PRIVATE_ENTITY: "[PRIVATE_INFORMATION]",
   }),
 });

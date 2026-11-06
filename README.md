@@ -82,6 +82,30 @@ that ordinary messages are not interrupted:
   values assigned to `password`, `token` or `secret`. Environment-variable
   references and placeholders such as `<your password>` are ignored. A private
   key is redacted as the whole block, not only its header.
+- Technical identifiers are handled in [technical-rules.js](./technical-rules.js):
+  - **Cloud:** AWS account IDs (labelled, dashed `1234-5678-9012`, or inside an
+    ARN), ARNs, IAM unique IDs, EC2/VPC/subnet/security-group IDs, RDS/ELB/ECR/S3
+    endpoints, `s3://` and `gs://` URIs, Azure tenant/subscription GUIDs, and GCP
+    project IDs. Public AWS managed-policy ARNs (`arn:aws:iam::aws:policy/...`)
+    are left alone.
+  - **Credentials:** any identifier containing `secret`, `token`, `password`,
+    `api_key`, `access_key`, … assigned in code, JSON, YAML or `.env` (so
+    `aws_secret_access_key=...` and `"password": "..."` are caught), `Bearer` and
+    `Basic` headers, secret query parameters such as `X-Amz-Signature=`, Azure
+    `AccountKey=`, and an unprefixed 40-character AWS secret key sitting next to
+    an access key ID. Type names (`password: string`) and references
+    (`os.environ[...]`, `${SECRET}`) are ignored.
+  - **URLs:** connection strings and URLs with an embedded password, internal
+    hosts (`.internal`, `.corp`, `.svc.cluster.local`), and document/meeting
+    links that grant access (Google Docs, Atlassian, SharePoint, Zoom, ...). Plain
+    public URLs are not touched.
+  - **Network:** IPv6 and MAC addresses and internal hostnames, in addition to
+    IPv4. Loopback, broadcast, times (`10:30:45`) and C++ scopes (`a::b`) are
+    ignored.
+  - **People:** usernames inside paths (`/Users/jane/`, `C:\Users\Jane\`) with
+    generic accounts such as `ubuntu` or `runner` skipped; SSNs (invalid ranges
+    rejected), CNICs, labelled passport/national-ID/driver-licence numbers, and
+    labelled bank account numbers.
 - `I'm Momina` / `I am Momina` require a capitalized name, so `I'm happy` is not
   a name; `my name is momina` also accepts lowercase. After `working for`/`works at`,
   a capitalized employer is always accepted. A lowercase one (`working for
@@ -113,10 +137,17 @@ within a conversation, so the AI can still tell people apart. Only the
 placeholder leaves the device.
 
 The placeholder-to-value mapping is stored per conversation in
-`chrome.storage.local`. When the reply (or your own sent message) shows a known
-placeholder, it is swapped back to the original value in the page and lightly
-highlighted. Editable text, such as the composer, is never changed, so restored
-values cannot be sent back out by accident. Values already mapped in a
+`chrome.storage.local`. When an **AI reply** shows a known placeholder, it is
+swapped back to the original value in the page and lightly highlighted. Your own
+sent messages are deliberately **not** restored: your chat bubble keeps showing
+`[EMAIL_1]`, so you can see exactly what the provider received instead of having
+to trust it. Editable text, such as the composer, is never changed, so restored
+values cannot be sent back out by accident. This applies on ChatGPT, Claude and
+Gemini (see `userMessageSelectors` in [content.js](./content.js)).
+
+The popup setting **Show original values in AI replies** only controls this
+display step. Your outgoing message is redacted either way; turning it off also
+deletes the saved mappings, and replies then show the placeholders as sent. Values already mapped in a
 conversation are redacted automatically if they appear in a later message.
 
 A new chat has no conversation id until its first message is sent, so its
@@ -216,6 +247,7 @@ and are excluded from the project and release package.
 - `content.js` intercepts sends on ChatGPT, Claude, and Gemini, and restores placeholders in replies.
 - `pseudonymization.js` assigns placeholders and restores them from the local mapping.
 - `detection-rules.js` contains the deterministic detectors and context filters.
+- `technical-rules.js` contains the cloud, credential, URL, network, path and ID detectors.
 - `background.js` coordinates extension messaging and the setup lifecycle.
 - `offscreen.js` downloads, verifies, caches, and runs approved models.
 - `model-policy.js` is the immutable model allowlist and integrity manifest.

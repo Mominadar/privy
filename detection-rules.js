@@ -8,6 +8,17 @@
  * Functions are pure so they can be unit-tested without a model.
  */
 
+import {
+  CODE_REFERENCE,
+  PLACEHOLDER_SECRET,
+  finding,
+  groupFinding,
+  shannonEntropy,
+  technicalFindings,
+} from "./technical-rules.js";
+
+export { shannonEntropy };
+
 const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 // Builds a case-insensitive literal (e.g. "my name is" -> "[mM][yY]\s+...")
@@ -19,15 +30,6 @@ function ci(phrase) {
       /\p{L}/u.test(ch) ? `[${ch.toLowerCase()}${ch.toUpperCase()}]` : ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     ).join(""))
     .join("\\s+");
-}
-
-function finding(type, value, start, extra = {}) {
-  return { type, value, source: "pattern-detector", score: 1, start, end: start + value.length, ...extra };
-}
-
-function groupFinding(type, match, group = 1) {
-  const value = match[group];
-  return finding(type, value, match.index + match[0].lastIndexOf(value));
 }
 
 function contextBefore(text, start, size = 40) {
@@ -139,23 +141,22 @@ const KNOWN_SECRET_PATTERNS = [
   /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
   /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{40,}\b/g,
-  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
+  // AWS access key IDs (AKIA/ASIA) and IAM unique IDs for users, roles, groups and policies.
+  /\b(?:(?:AKIA|ASIA)[0-9A-Z]{16}|(?:AIDA|AROA|AGPA|AIPA|ANPA|ANVA)[0-9A-Z]{16,17})\b/g,
   /\bAIza[0-9A-Za-z_-]{35}\b/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
   /\bhf_[A-Za-z0-9]{30,}\b/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}/g,
+  /\bnpm_[A-Za-z0-9]{36}\b/g,
+  /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b/g,
+  /\bya29\.[A-Za-z0-9_-]{20,}/g,
+  /\bGOCSPX-[A-Za-z0-9_-]{20,}/g,
+  /\bsh(?:pat|pss|pca)_[0-9a-f]{32}\b/g,
+  /\bdop_v1_[0-9a-f]{64}\b/g,
+  /\bhttps:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[A-Za-z0-9]+/g,
+  /\bhttps:\/\/(?:discord(?:app)?\.com)\/api\/webhooks\/\d+\/[\w-]+/g,
   /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
 ];
-
-export function shannonEntropy(value) {
-  const counts = new Map();
-  for (const ch of value) counts.set(ch, (counts.get(ch) || 0) + 1);
-  let entropy = 0;
-  for (const count of counts.values()) {
-    const p = count / value.length;
-    entropy -= p * Math.log2(p);
-  }
-  return entropy;
-}
 
 function looksRandom(value) {
   return /[A-Za-z]/.test(value) && /\d/.test(value) && shannonEntropy(value) >= 3.5;
@@ -166,10 +167,6 @@ const ASSIGNED_SECRET = new RegExp(
   `\\s*(is|=|:)\\s*["'\`]?([^\\s"'\`]{6,})`,
   "g",
 );
-
-const PLACEHOLDER_SECRET = /^(?:\*+|x+|\.+|<[^>]*>|\[[^\]]*\]|\{[^}]*\}|null|none|undefined|example|changeme|your\w*)$/i;
-// Environment variables, template expressions, and property paths are references, not secrets.
-const CODE_REFERENCE = /^(?:\$\{[^}]*\}|\$\w+|%\w+%|[A-Z][A-Z0-9_]*|[\w$]+(?:\.[\w$]+)+|[\w$.]+\(.*\)?)$/;
 
 function secretFindings(text) {
   const known = KNOWN_SECRET_PATTERNS.flatMap((regex) =>
@@ -291,7 +288,10 @@ function contextualFindings(text, { isSingleToken } = {}) {
  * vocabulary so lowercase employers can be recognized.
  */
 export function patternFindings(text, options = {}) {
-  return [
+  // resolveFindings drops overlaps (earlier wins), so a value matched by two
+  // detectors (e.g. "password: x" and a named-secret rule) is reported once.
+  return resolveFindings([
+    ...technicalFindings(text),
     ...secretFindings(text),
     ...emailFindings(text),
     ...cardFindings(text),
@@ -300,7 +300,7 @@ export function patternFindings(text, options = {}) {
     ...phoneFindings(text),
     ...dateOfBirthFindings(text),
     ...contextualFindings(text, options),
-  ];
+  ]);
 }
 
 // --- Model output filtering ------------------------------------------------

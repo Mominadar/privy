@@ -40,6 +40,14 @@ test("restored values are never written into editable composer text", async () =
   assert.match(source, /parent\.isContentEditable \|\| parent\.closest\("textarea, input/);
 });
 
+test("the user's own sent messages keep their placeholders; only AI replies are restored", async () => {
+  const source = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  assert.match(source, /parent\.closest\(USER_MESSAGE_SELECTOR\)\) return;/);
+  for (const selector of ['data-message-author-role="user"', 'data-testid="user-message"', "user-query"]) {
+    assert.ok(source.includes(selector), selector);
+  }
+});
+
 test.todo("Replacing a custom model removes the prior custom model's orphaned cached files");
 test.todo("cached model readiness re-verifies content hashes rather than checking presence only");
 test.todo("large model downloads do not retain both all chunks and a second full-size buffer");

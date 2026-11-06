@@ -8,6 +8,7 @@ const files = [
   "content.css",
   "pseudonymization.js",
   "detection-rules.js",
+  "technical-rules.js",
   "scan-pipeline.js",
   "entity-normalization.js",
   "model-policy.js",

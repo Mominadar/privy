@@ -19,10 +19,12 @@
         'textarea[data-testid="prompt-textarea"]',
         'textarea[placeholder*="Message"]',
       ],
+      userMessageSelectors: ['[data-message-author-role="user"]'],
     },
     "chat.openai.com": {
       name: "ChatGPT",
       composerSelectors: ["#prompt-textarea", 'textarea[data-testid="prompt-textarea"]'],
+      userMessageSelectors: ['[data-message-author-role="user"]'],
     },
     "claude.ai": {
       name: "Claude",
@@ -31,6 +33,7 @@
         '.ProseMirror[contenteditable="true"]',
         '[contenteditable="true"][aria-label*="write" i]',
       ],
+      userMessageSelectors: ['[data-testid="user-message"]'],
     },
     "gemini.google.com": {
       name: "Gemini",
@@ -39,6 +42,7 @@
         '.ql-editor[contenteditable="true"]',
         '[contenteditable="true"][aria-label*="prompt" i]',
       ],
+      userMessageSelectors: ["user-query", '[class*="user-query"]'],
     },
   };
   const siteAdapter = SITE_ADAPTERS[location.hostname] || SITE_ADAPTERS["chatgpt.com"];
@@ -769,6 +773,9 @@
   const pendingRestoreNodes = new Set();
   let restoreScheduled = false;
   const TOKEN_HINT = /[A-Z]_\d/;
+  // The user's own sent messages keep their placeholders, so the chat itself
+  // shows what the provider actually received. Only AI replies are restored.
+  const USER_MESSAGE_SELECTOR = (siteAdapter.userMessageSelectors || []).join(", ");
 
   function vaultForNode(node) {
     const href = node.parentElement?.closest("a[href]")?.getAttribute("href");
@@ -788,6 +795,7 @@
     const parent = node.parentElement;
     // Never touch editable text: restored values must not be sent back out.
     if (!parent || parent.isContentEditable || parent.closest("textarea, input, script, style, noscript")) return;
+    if (USER_MESSAGE_SELECTOR && parent.closest(USER_MESSAGE_SELECTOR)) return;
     const vault = vaultForNode(node);
     if (!vault) return;
     const { text, restored } = pseudo.restore(node.nodeValue, vault);

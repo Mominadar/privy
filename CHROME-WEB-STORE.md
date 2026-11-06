@@ -12,12 +12,17 @@
 
 Privy Local Privacy Guard checks outgoing messages for names, organizations,
 locations, dates of birth, email addresses, phone numbers, payment-card
-candidates, IP addresses, API keys, and private keys before they are sent.
+candidates, government and bank IDs, IP and MAC addresses, internal hostnames,
+cloud account IDs and resource identifiers (such as AWS account IDs and ARNs),
+connection strings, usernames in file paths, API keys, passwords, and private
+keys before they are sent.
 
 - Detection and redaction happen locally in Chrome.
 - The user chooses whether to send a redacted message, the original, or nothing.
-- Redacted values become placeholders such as [PERSON_1]; replies are shown with
-  the original values restored on the device, so the values are never sent.
+- Redacted values become placeholders such as [PERSON_1]. Your own sent message
+  keeps its placeholders on screen so you can see what was actually sent; AI
+  replies are shown with the original values restored on the device, so the
+  values are never sent. Redaction does not depend on that display setting.
 - Users can classify missed private text and remember false positives locally.
 - Protection can be paused or resumed at any time.
 - Models are downloaded only after explicit user action.
@@ -107,8 +112,9 @@ Replace its contact placeholder before hosting.
 4. Send a test message such as `My name is Example Person and my email is example.person@gmail.com`.
    (Reserved documentation domains such as `example.com` are intentionally not flagged.)
 5. The privacy confirmation modal should offer original, redacted, and cancel actions.
-6. Choose **Send redacted**. The site receives `[PERSON_1]` and `[EMAIL_1]`; the
-   reply is displayed with the original values restored locally.
+6. Choose **Send redacted**. The site receives `[PERSON_1]` and `[EMAIL_1]`; your
+   sent message keeps showing those placeholders, and the AI reply is displayed
+   with the original values restored locally.
 
 All executable code is packaged with the extension. Hugging Face downloads are
 limited to pinned configuration, tokenizer, and ONNX weight data. Repository
